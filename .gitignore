@@ -1,3 +1,6 @@
 # Folders to ignore
 *lib
 *build
+
+# Ignore crap written by Claude
+main_old.cpp
