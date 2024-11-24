@@ -1,3 +1,10 @@
+// Useful links...
+// Custom barebones game engine written using Vulkan
+// https://github.com/eliasdaler/edbr/blob/517f76c1ee6f12ab3fccd3ad3ea6c8039ece233a/edbr/include/edbr/Graphics/Vulkan/Init.h
+// https://github.com/eliasdaler/edbr/tree/517f76c1ee6f12ab3fccd3ad3ea6c8039ece233a/edbr/include/edbr/Graphics/Vulkan
+// Vulkan-tutorial.com
+// https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Base_code
+
 #include <vulkan/vulkan.h>
 
 #include "vulkan_utils.h"
@@ -12,30 +19,6 @@ const std::vector<const char*> validationLayers = {
 #else
 	const bool enableValidationLayers = true;
 #endif
-
-VkResult CreateDebugUtilsMessengerEXT(
-	VkInstance instance,
-	const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
-	const VkAllocationCallbacks* pAllocator,
-	VkDebugUtilsMessengerEXT* pDebugMessenger)
-{
-	auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(
-		instance, "vkCreateDebugUtilsMessengerEXT");
-	if (func != nullptr) {
-		return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
-	} else {
-		return VK_ERROR_EXTENSION_NOT_PRESENT;
-	}
-}
-
-void DestroyDebugUtilsMessengerEXT(VkInstance instance,
-									VkDebugUtilsMessengerEXT debugMessenger,
-									const VkAllocationCallbacks* pAllocator) {
-	auto func  = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-	if (func != nullptr) {
-		func(instance, debugMessenger, pAllocator);
-	}
-}
 
 class VulkanComputeApp {
     public:
@@ -80,7 +63,7 @@ class VulkanComputeApp {
             createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
             createInfo.pApplicationInfo = &appInfo;
 
-            auto extensions = getRequiredExtensions();
+            auto extensions = vu::getRequiredExtensions();
             createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
             createInfo.ppEnabledExtensionNames = extensions.data();
 
@@ -112,22 +95,22 @@ class VulkanComputeApp {
                 throw std::runtime_error("failed to find any GPUs with Vulkan support!");
             }
 
-            // std::vector<VkPhysicalDevice> devices(deviceCount);
+            std::vector<VkPhysicalDevice> devices(deviceCount);
             // // This has different behavior when we call it a second time
             // // It now allocates pointers to the physical devices into the vector
-            // vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+            vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 
-            // for (const auto& device : devices) {
-            //     // For now, we pick the first device
-            //     if (isDeviceSuitable(device)) {
-            //         physicalDevice = device;
-            //         break;
-            //     }
-            // }
+            for (const auto& device : devices) {
+                // For now, we pick the first device
+                if (vu::isDeviceSuitable(device)) {
+                    physicalDevice = device;
+                    break;
+                }
+            }
 
-            // if (physicalDevice == VK_NULL_HANDLE) {
-            //     throw std::runtime_error("failed to find a suitable GPU!");
-            // }
+            if (physicalDevice == VK_NULL_HANDLE) {
+                throw std::runtime_error("failed to find a suitable GPU!");
+            }
         }
 
         // bool isDeviceSuitable(VkPhysicalDevice device) {
@@ -151,8 +134,10 @@ class VulkanComputeApp {
             vkDestroyDevice(device, nullptr);
 
             if (enableValidationLayers) {
-                DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+                vu::DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
             }
+
+            vkDestroyInstance(instance, nullptr);
         };
 
 }
