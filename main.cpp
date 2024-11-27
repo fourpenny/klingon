@@ -50,7 +50,10 @@ class VulkanComputeApp {
         // Descriptor sets - define resources provided to shaders
         // See https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html
         // for more details
+        int num_bindings = 4; // for grid, lights, circles, rectangles
         VkDescriptorSetLayout descriptorSetLayout;
+        VkDescriptorPool descriptorPool;
+        VkDescriptorSet descriptorSet;
 
         void initVulkan() {
             createInstance();
@@ -59,9 +62,13 @@ class VulkanComputeApp {
             }
             pickPhysicalDevice();
             createLogicalDevice();
-            createCommandPool();
-            // Create the buffers you need for objects we use in compute pipeline
+            // Create the buffers needed for objects we use in compute pipeline
+            // (descriptor sets)
+            createDescriptorSetLayout();
+            createDescriptorPool();
+            createDescriptorSets();
             // Create the command buffers
+            createCommandPool();
         }
 
         void createInstance() {
@@ -206,8 +213,7 @@ class VulkanComputeApp {
         }
 
         void createDescriptorSetLayout(){
-            VkDescriptorSetLayoutBinding bindings[4];
-            int num_bindings = 4; // for grid, lights, circles, rectangles
+            VkDescriptorSetLayoutBinding bindings[num_bindings];
 
             for (int i = 0; i < num_bindings; ++i){
                 bindings[i].binding = i;
@@ -224,6 +230,37 @@ class VulkanComputeApp {
 
             if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to create descriptor set layout!");
+            }
+        }
+
+        void createDescriptorPool(){
+            VkDescriptorPoolSize poolSizes[num_bindings];
+
+            for (int i = 0; i < num_bindings; ++i){
+                poolSizes[i].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                poolSizes[i].descriptorCount = 1; 
+            }
+
+            VkDescriptorPoolCreateInfo poolInfo{};
+            poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+            poolInfo.poolSizeCount = num_bindings;
+            poolInfo.pPoolSizes = poolSizes;
+            poolInfo.maxSets = 1; // One descriptor set
+
+            if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+                throw std::runtime_error("Failed to create descriptor pool!");
+            }
+        }
+
+        void createDescriptorSets(){
+            VkDescriptorSetAllocateInfo allocInfo{};
+            allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            allocInfo.descriptorPool = descriptorPool;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &descriptorSetLayout;
+
+            if (vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet) != VK_SUCCESS) {
+                throw std::runtime_error("Failed to allocate descriptor set!");
             }
         }
 
