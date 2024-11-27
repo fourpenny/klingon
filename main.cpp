@@ -21,6 +21,10 @@ const std::vector<const char*> validationLayers = {
 	const bool enableValidationLayers = true;
 #endif
 
+class GridManager {
+    void init() {};
+};
+
 class VulkanComputeApp {
     public:
         void init(){
@@ -40,6 +44,13 @@ class VulkanComputeApp {
 
         // Queues
         VkQueue computeQueue;
+        VkCommandPool commandPool;
+        VkCommandBuffer commandBuffer;
+
+        // Descriptor sets - define resources provided to shaders
+        // See https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html
+        // for more details
+        VkDescriptorSetLayout descriptorSetLayout;
 
         void initVulkan() {
             createInstance();
@@ -48,9 +59,9 @@ class VulkanComputeApp {
             }
             pickPhysicalDevice();
             createLogicalDevice();
-            // TODO: Figure out which of the parts of a pipeline you actually
-            // need to make here from the Vulkan tutorial, since we're not
-            // actually going to need to render anything :) 
+            createCommandPool();
+            // Create the buffers you need for objects we use in compute pipeline
+            // Create the command buffers
         }
 
         void createInstance() {
@@ -164,6 +175,57 @@ class VulkanComputeApp {
 
             vkGetDeviceQueue(device, indices.computeFamily.value(), 0, &computeQueue);
         };
+
+        void createCommandPool(){
+            vu::QueueFamilyIndices queueFamilyIndices = vu::findQueueFamilies(physicalDevice);
+
+            VkCommandPoolCreateInfo poolInfo{};
+            poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+            poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+            poolInfo.queueFamilyIndex = queueFamilyIndices.computeFamily.value();
+
+            if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create command pool!");
+            }
+        }
+
+        void createCommandBuffer(){
+            VkCommandBufferAllocateInfo allocateInfo = {};
+            allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+            allocateInfo.commandPool = commandPool;
+            allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            allocateInfo.commandBufferCount = 1;
+
+            if (vkAllocateCommandBuffers(device, &allocateInfo, &commandBuffer) != VK_SUCCESS){
+                throw std::runtime_error("failed to allocate command buffers!");
+            }
+        }
+
+        void createComputePipeline(){
+
+        }
+
+        void createDescriptorSetLayout(){
+            VkDescriptorSetLayoutBinding bindings[4];
+            int num_bindings = 4; // for grid, lights, circles, rectangles
+
+            for (int i = 0; i < num_bindings; ++i){
+                bindings[i].binding = i;
+                bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                bindings[i].descriptorCount = 1;
+                bindings[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+                bindings[i].pImmutableSamplers = nullptr;
+            }
+
+            VkDescriptorSetLayoutCreateInfo layoutInfo{};
+            layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+            layoutInfo.bindingCount = num_bindings;
+            layoutInfo.pBindings = bindings;
+
+            if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
+                throw std::runtime_error("Failed to create descriptor set layout!");
+            }
+        }
 
         void cleanup(){
             // Do all the stuff to clean up Vulkan here
