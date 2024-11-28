@@ -48,10 +48,7 @@ namespace vu {
     bool isDeviceSuitable(VkPhysicalDevice device) {
         QueueFamilyIndices indicies = findQueueFamilies(device);
 
-        std::vector<const char*> reqExtensions;
-        bool extensionsSupported = checkDeviceExtensionSupport(device, reqExtensions);
-
-        return indicies.isComplete() && extensionsSupported;
+        return indicies.isComplete();
     }
 
     std::vector<const char*> getRequiredExtensions(bool enableValidationLayers) {
@@ -80,4 +77,4 @@ namespace vu {
     }
 } // namespace vu
 
-#endif KLIGON__DEVICE_UTILS_HPP
+#endif // KLINGON__DEVICE_UTILS_HPP

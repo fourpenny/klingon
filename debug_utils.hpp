@@ -11,6 +11,10 @@
 #define KLINGON__DEBUG_UTILS_HPP
 
 namespace vu {
+    // Use the standard validation layer SDK
+    const std::vector<const char*> validationLayers = {
+        "VK_LAYER_KHRONOS_validation"
+    };
     // Typedef for debugging callbacks
     typedef VkBool32 (VKAPI_PTR* DebugCallbackType)(
         VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -26,7 +30,22 @@ namespace vu {
         std::vector<VkLayerProperties> availableLayers(layerCount);
         vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
 
-        return false;
+        for (const char* layerName : validationLayers) {
+			bool layerFound = false;
+
+			for (const auto& layerProperties : availableLayers) {
+				if (strcmp(layerName, layerProperties.layerName) == 0) {
+					layerFound = true;
+					break;
+				}
+			}
+
+			if (!layerFound) {
+				return false;
+			}
+		}
+
+		return true;
     }
 
     VkResult CreateDebugUtilsMessengerEXT(
@@ -52,15 +71,17 @@ namespace vu {
             func(instance, debugMessenger, pAllocator);
         }
     }
+    
+    static VKAPI_ATTR VkBool32 VKAPI_CALL defaultDebugCallback(
+		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+		VkDebugUtilsMessageTypeFlagsEXT messageType,
+		const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+		void* pUserData) 
+    {
+			std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
 
-    void setupDebugMessenger(VkInstance &instance, VkDebugUtilsMessengerEXT &debugMessenger) {
-        VkDebugUtilsMessengerCreateInfoEXT createInfo;
-        populateDebugMessengerCreateInfo(createInfo);
-
-        if (CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &debugMessenger) != VK_SUCCESS) {
-            throw std::runtime_error("failed to set up debug messenger!");
-        }
-    }
+			return VK_FALSE;
+	}
 
     void populateDebugMessengerCreateInfo(
         VkDebugUtilsMessengerCreateInfoEXT& createInfo,
@@ -79,16 +100,15 @@ namespace vu {
         createInfo.pUserData = userData;
     }
 
-    static VKAPI_ATTR VkBool32 VKAPI_CALL defaultDebugCallback(
-		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-		VkDebugUtilsMessageTypeFlagsEXT messageType,
-		const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-		void* pUserData) 
-    {
-			std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+    void setupDebugMessenger(VkInstance &instance, VkDebugUtilsMessengerEXT &debugMessenger) {
+        VkDebugUtilsMessengerCreateInfoEXT createInfo;
+        populateDebugMessengerCreateInfo(createInfo);
 
-			return VK_FALSE;
-	}
+        if (CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &debugMessenger) != VK_SUCCESS) {
+            throw std::runtime_error("failed to set up debug messenger!");
+        }
+    }
+
 } // namespace vu
 
-#endif KLINGON__DEBUG_UTILS_HPP
+#endif // KLINGON__DEBUG_UTILS_HPP

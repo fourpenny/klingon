@@ -10,10 +10,6 @@
 #include "debug_utils.hpp"
 #include "device_utils.hpp"
 
-// Use the standard validation layer SDK
-const std::vector<const char*> validationLayers = {
-    "VK_LAYER_KHRONOS_validation"
-};
 
 #ifdef NDEBUG
 	const bool enableValidationLayers = false;
@@ -22,12 +18,12 @@ const std::vector<const char*> validationLayers = {
 #endif
 
 class GridManager {
-    void init() {};
+    GridManager() {};
 };
 
 class VulkanComputeApp {
     public:
-        void init(){
+        VulkanComputeApp(){
             initVulkan();
         }
 
@@ -55,8 +51,12 @@ class VulkanComputeApp {
         VkDescriptorPool descriptorPool;
         VkDescriptorSet descriptorSet;
 
+        // Buffers - one for each binding
+        VkBuffer buffers[4];
+
         void initVulkan() {
             createInstance();
+            // std::cout << "created an instance!" << std::endl;
             if (enableValidationLayers){
                 vu::setupDebugMessenger(instance, debugMessenger);
             }
@@ -69,6 +69,7 @@ class VulkanComputeApp {
             createDescriptorSets();
             // Create the command buffers
             createCommandPool();
+            createCommandBuffer();
         }
 
         void createInstance() {
@@ -253,19 +254,33 @@ class VulkanComputeApp {
         }
 
         void createDescriptorSets(){
-            VkDescriptorSetAllocateInfo allocInfo{};
-            allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-            allocInfo.descriptorPool = descriptorPool;
-            allocInfo.descriptorSetCount = 1;
-            allocInfo.pSetLayouts = &descriptorSetLayout;
-
-            if (vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet) != VK_SUCCESS) {
-                throw std::runtime_error("Failed to allocate descriptor set!");
+            VkDescriptorBufferInfo bufferInfos[num_bindings];
+            for (int i = 0; i < num_bindings; ++i){
+                bufferInfos[i].buffer = buffers[i];  
+                bufferInfos[i].offset = 0;
+                bufferInfos[i].range = VK_WHOLE_SIZE;
             }
+
+            VkWriteDescriptorSet descriptorWrites[num_bindings];
+            for (int i = 0; i < num_bindings; ++i){
+                descriptorWrites[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptorWrites[i].dstSet = descriptorSet;
+                descriptorWrites[i].dstBinding = i;
+                descriptorWrites[i].dstArrayElement = 0;
+                descriptorWrites[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                descriptorWrites[i].descriptorCount = 1;
+                descriptorWrites[i].pBufferInfo = &bufferInfos[i];
+            }
+            vkUpdateDescriptorSets(device, 4, descriptorWrites, 0, nullptr);
         }
 
         void cleanup(){
             // Do all the stuff to clean up Vulkan here
+            vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+            vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+
+            vkDestroyCommandPool(device, commandPool, nullptr);
+
             vkDestroyDevice(device, nullptr);
 
             if (enableValidationLayers) {
@@ -276,3 +291,15 @@ class VulkanComputeApp {
         };
 
 };
+
+int main() {
+    try {
+        VulkanComputeApp app;
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
+        return EXIT_FAILURE;
+    }
+    std::cout << "hello" << std::endl;
+
+    return EXIT_SUCCESS;
+}
