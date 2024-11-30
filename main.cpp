@@ -6,6 +6,7 @@
 // https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Base_code
 
 #include <vulkan/vulkan.h>
+#include "glm/glm.hpp"
 
 #include "debug_utils.hpp"
 #include "device_utils.hpp"
@@ -17,8 +18,22 @@
 	const bool enableValidationLayers = true;
 #endif
 
-class GridManager {
-    GridManager() {};
+struct Rectangle {
+    glm::vec4 rect;
+};
+
+struct Circle {
+    glm::vec3 circ;
+};
+
+struct LightSource {
+    glm::vec4 light;
+};
+
+struct GridCell {
+    int x;
+    int y;
+    float val;
 };
 
 class VulkanComputeApp {
@@ -96,8 +111,8 @@ class VulkanComputeApp {
 
             VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
             if (enableValidationLayers) {
-                createInfo.enabledLayerCount = static_cast<u_int32_t>(validationLayers.size());
-                createInfo.ppEnabledLayerNames = validationLayers.data();
+                createInfo.enabledLayerCount = static_cast<u_int32_t>(vu::validationLayers.size());
+                createInfo.ppEnabledLayerNames = vu::validationLayers.data();
 
                 vu::populateDebugMessengerCreateInfo(debugCreateInfo);
                 createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debugCreateInfo;
@@ -171,8 +186,8 @@ class VulkanComputeApp {
             createInfo.ppEnabledExtensionNames = nullptr; 
 
             if (enableValidationLayers) {
-                createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-                createInfo.ppEnabledLayerNames = validationLayers.data();
+                createInfo.enabledLayerCount = static_cast<uint32_t>(vu::validationLayers.size());
+                createInfo.ppEnabledLayerNames = vu::validationLayers.data();
             } else {
                 createInfo.enabledLayerCount = 0;
             }
@@ -253,7 +268,46 @@ class VulkanComputeApp {
             }
         }
 
+        void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
+            VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
+            VkBufferCreateInfo bufferInfo{};
+            bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            bufferInfo.size = size; 
+            bufferInfo.usage = usage; 
+            bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            
+            if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create buffer!");
+            }
+
+            VkMemoryRequirements memRequirements;
+            vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
+            
+            VkMemoryAllocateInfo allocInfo{};
+            allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            allocInfo.allocationSize = memRequirements.size;
+            allocInfo.memoryTypeIndex = vu::findMemoryType(
+                memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                physicalDevice);
+
+            if (vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
+                throw std::runtime_error("failed to allocate buffer memory!");
+            }
+        
+            vkBindBufferMemory(device, buffer, bufferMemory, 0);
+        }
+
         void createDescriptorSets(){
+            VkDescriptorSetAllocateInfo allocInfo{};
+            allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            allocInfo.descriptorPool = descriptorPool;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &descriptorSetLayout; 
+
+            if (vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet) != VK_SUCCESS) {
+                throw std::runtime_error("failed to allocate descriptor sets!");
+            }
+            
             VkDescriptorBufferInfo bufferInfos[num_bindings];
             for (int i = 0; i < num_bindings; ++i){
                 bufferInfos[i].buffer = buffers[i];  
@@ -270,6 +324,7 @@ class VulkanComputeApp {
                 descriptorWrites[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
                 descriptorWrites[i].descriptorCount = 1;
                 descriptorWrites[i].pBufferInfo = &bufferInfos[i];
+                descriptorWrites[i].pNext = nullptr;
             }
             vkUpdateDescriptorSets(device, 4, descriptorWrites, 0, nullptr);
         }
