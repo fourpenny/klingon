@@ -10,6 +10,7 @@
 
 #include "debug_utils.hpp"
 #include "device_utils.hpp"
+#include "buffer_utils.hpp"
 
 
 #ifdef NDEBUG
@@ -36,6 +37,23 @@ struct GridCell {
     float val;
 };
 
+class GridManager {
+    public:
+        // Grid Info
+        std::vector<GridCell> grid;
+        int gridWidth = 20;
+        int gridHeight = 20;
+
+        GridManager(){
+            for (int i = 0; i < gridHeight; i++){
+                for (int j = 0; j < gridWidth; j++){
+                    GridCell cell{i, j, 0.0};
+                    grid.push_back(cell);
+                }
+            }
+        }
+};
+
 class VulkanComputeApp {
     public:
         VulkanComputeApp(){
@@ -46,6 +64,9 @@ class VulkanComputeApp {
             cleanup();
         }
     private:
+        // Grid stuff
+        GridManager gridManager;
+
         VkInstance instance;
         VkDebugUtilsMessengerEXT debugMessenger;
 
@@ -61,29 +82,40 @@ class VulkanComputeApp {
         // Descriptor sets - define resources provided to shaders
         // See https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html
         // for more details
-        int num_bindings = 4; // for grid, lights, circles, rectangles
+        int num_bindings = 1; // for grid, lights, circles, rectangles
         VkDescriptorSetLayout descriptorSetLayout;
         VkDescriptorPool descriptorPool;
         VkDescriptorSet descriptorSet;
 
-        // Buffers - one for each binding
-        VkBuffer buffers[4];
+        // Buffers for shapes
+        VkBuffer gridBuffer;
+        VkDeviceMemory gridBufferMemory;
+        VkDeviceSize gridBufferSize;
+        // VkBuffer circleBuffer;
+        // VkDeviceSize circleBufferSize;
+        // VkBuffer rectBuffer;
+        // VkDeviceSize rectBufferSize;
+        // VkBuffer lightBuffer; 
+        // VkDeviceSize lightBufferSize;
 
         void initVulkan() {
             createInstance();
-            // std::cout << "created an instance!" << std::endl;
+            std::cout << "created an instance!" << std::endl;
             if (enableValidationLayers){
                 vu::setupDebugMessenger(instance, debugMessenger);
             }
             pickPhysicalDevice();
             createLogicalDevice();
+            
+            createDescriptorSetLayout();
+            createCommandPool();
+            
             // Create the buffers needed for objects we use in compute pipeline
             // (descriptor sets)
-            createDescriptorSetLayout();
+            initializeAppBuffers();
             createDescriptorPool();
             createDescriptorSets();
-            // Create the command buffers
-            createCommandPool();
+            // // Create the command buffers
             createCommandBuffer();
         }
 
@@ -298,6 +330,8 @@ class VulkanComputeApp {
         }
 
         void createDescriptorSets(){
+            std::cout << "we're updating the descriptor sets" << std::endl;
+
             VkDescriptorSetAllocateInfo allocInfo{};
             allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
             allocInfo.descriptorPool = descriptorPool;
@@ -308,29 +342,57 @@ class VulkanComputeApp {
                 throw std::runtime_error("failed to allocate descriptor sets!");
             }
             
-            VkDescriptorBufferInfo bufferInfos[num_bindings];
-            for (int i = 0; i < num_bindings; ++i){
-                bufferInfos[i].buffer = buffers[i];  
-                bufferInfos[i].offset = 0;
-                bufferInfos[i].range = VK_WHOLE_SIZE;
-            }
+            VkDescriptorBufferInfo gridBufferInfo{};
+            gridBufferInfo.buffer = gridBuffer;
+            gridBufferInfo.offset = 0;
+            gridBufferInfo.range = sizeof(float);
 
-            VkWriteDescriptorSet descriptorWrites[num_bindings];
-            for (int i = 0; i < num_bindings; ++i){
-                descriptorWrites[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                descriptorWrites[i].dstSet = descriptorSet;
-                descriptorWrites[i].dstBinding = i;
-                descriptorWrites[i].dstArrayElement = 0;
-                descriptorWrites[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                descriptorWrites[i].descriptorCount = 1;
-                descriptorWrites[i].pBufferInfo = &bufferInfos[i];
-                descriptorWrites[i].pNext = nullptr;
+            std::cout << "howdy?" << std::endl;
+            VkWriteDescriptorSet gridDescriptorWrite;
+            gridDescriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            gridDescriptorWrite.dstSet = descriptorSet;
+            gridDescriptorWrite.dstBinding = 0;
+            gridDescriptorWrite.dstArrayElement = 0;
+            gridDescriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            gridDescriptorWrite.descriptorCount = 1;
+            gridDescriptorWrite.pBufferInfo = &gridBufferInfo;
+            gridDescriptorWrite.pImageInfo = nullptr;
+            gridDescriptorWrite.pTexelBufferView = nullptr;
+            
+            vkUpdateDescriptorSets(device, 1, &gridDescriptorWrite, 0, nullptr);
+        }
+
+        void initializeAppBuffers(){
+            VkDeviceSize gridBufferSize = gridManager.gridHeight * gridManager.gridWidth * sizeof(float);
+
+            VkBuffer gridStagingBuffer;
+            VkDeviceMemory gsBufferMemory;
+            createBuffer(gridBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                gridStagingBuffer, gsBufferMemory);
+            
+            void* gridData;
+            vkMapMemory(device, gsBufferMemory, 0, gridBufferSize, 0, &gridData);
+            std::vector<float> cellValues;
+            for (auto cell : gridManager.grid) {
+                cellValues.push_back(cell.val);
             }
-            vkUpdateDescriptorSets(device, 4, descriptorWrites, 0, nullptr);
+            memcpy(gridData, cellValues.data(), (size_t) gridBufferSize);
+            vkUnmapMemory(device, gsBufferMemory);
+
+            createBuffer(gridBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, gridBuffer, gridBufferMemory);
+
+            vu::copyBuffer(device, commandPool, gridStagingBuffer, gridBuffer, gridBufferSize, computeQueue);
+
+            vkDestroyBuffer(device, gridStagingBuffer, nullptr);
+            vkFreeMemory(device, gsBufferMemory, nullptr);
         }
 
         void cleanup(){
             // Do all the stuff to clean up Vulkan here
+            vkDestroyBuffer(device, gridBuffer, nullptr);
+            vkFreeMemory(device, gridBufferMemory, nullptr);
+            
             vkDestroyDescriptorPool(device, descriptorPool, nullptr);
             vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 
