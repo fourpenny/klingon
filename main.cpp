@@ -111,13 +111,11 @@ class VulkanComputeApp {
             pickPhysicalDevice();
             createLogicalDevice();
 
-            createVmaAllocator();
-            // createDescriptorSetLayout();
-            // createCommandPool();
+            createComputePipeline();
             
             // // Create the buffers needed for objects we use in compute pipeline
-            // // (descriptor sets)
-            // initializeAppBuffers();
+            createVmaAllocator();
+            initializeAppBuffers();
             // createDescriptorPool();
             // createDescriptorSets();
             // // // Create the command buffers
@@ -274,7 +272,12 @@ class VulkanComputeApp {
         }
 
         void createComputePipeline(){
-
+            // TODO: Handle all the stpes of making a compute pipeline
+            // 1. Create compute shader modules
+            // 2. Create pipeline stages (there's only 1, a compute stage)
+            // 3. Create compute pipeline
+            // 4. Destroy shader modules now that they're no longer needed
+            // outside the pipeline
         }
 
         void createDescriptorSetLayout(){
