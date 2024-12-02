@@ -1,6 +1,7 @@
 # Folders to ignore
 *lib
 *build
+*VulkanMemoryAllocator
 
 # Ignore crap written by Claude
 main_old.cpp

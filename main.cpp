@@ -5,13 +5,13 @@
 // Vulkan-tutorial.com
 // https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Base_code
 
-#include <vulkan/vulkan.h>
 #include "glm/glm.hpp"
 
 #include "debug_utils.hpp"
 #include "device_utils.hpp"
 #include "buffer_utils.hpp"
-
+#define VMA_IMPLEMENTATION
+#include "vk_mem_alloc.h"
 
 #ifdef NDEBUG
 	const bool enableValidationLayers = false;
@@ -98,6 +98,10 @@ class VulkanComputeApp {
         // VkBuffer lightBuffer; 
         // VkDeviceSize lightBufferSize;
 
+        // VMA
+        VmaAllocator allocator;
+        VmaAllocation gridAllocation;
+
         void initVulkan() {
             createInstance();
             std::cout << "created an instance!" << std::endl;
@@ -106,17 +110,18 @@ class VulkanComputeApp {
             }
             pickPhysicalDevice();
             createLogicalDevice();
+
+            createVmaAllocator();
+            // createDescriptorSetLayout();
+            // createCommandPool();
             
-            createDescriptorSetLayout();
-            createCommandPool();
-            
-            // Create the buffers needed for objects we use in compute pipeline
-            // (descriptor sets)
-            initializeAppBuffers();
-            createDescriptorPool();
-            createDescriptorSets();
-            // // Create the command buffers
-            createCommandBuffer();
+            // // Create the buffers needed for objects we use in compute pipeline
+            // // (descriptor sets)
+            // initializeAppBuffers();
+            // createDescriptorPool();
+            // createDescriptorSets();
+            // // // Create the command buffers
+            // createCommandBuffer();
         }
 
         void createInstance() {
@@ -231,6 +236,18 @@ class VulkanComputeApp {
             vkGetDeviceQueue(device, indices.computeFamily.value(), 0, &computeQueue);
         };
 
+        void createVmaAllocator(){
+            VmaAllocatorCreateInfo allocatorCreateInfo{};
+            allocatorCreateInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
+            allocatorCreateInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+            allocatorCreateInfo.physicalDevice = physicalDevice;
+            allocatorCreateInfo.device = device;
+            allocatorCreateInfo.instance = instance;
+            allocatorCreateInfo.pVulkanFunctions = nullptr;
+
+            vmaCreateAllocator(&allocatorCreateInfo, &allocator);
+        }
+
         void createCommandPool(){
             vu::QueueFamilyIndices queueFamilyIndices = vu::findQueueFamilies(physicalDevice);
 
@@ -300,34 +317,29 @@ class VulkanComputeApp {
             }
         }
 
-        void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
-            VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
-            VkBufferCreateInfo bufferInfo{};
-            bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-            bufferInfo.size = size; 
-            bufferInfo.usage = usage; 
-            bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        // void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
+        //     VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
             
-            if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
-                throw std::runtime_error("failed to create buffer!");
-            }
+        //     if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
+        //         throw std::runtime_error("failed to create buffer!");
+        //     }
 
-            VkMemoryRequirements memRequirements;
-            vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
+        //     VkMemoryRequirements memRequirements;
+        //     vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
             
-            VkMemoryAllocateInfo allocInfo{};
-            allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-            allocInfo.allocationSize = memRequirements.size;
-            allocInfo.memoryTypeIndex = vu::findMemoryType(
-                memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                physicalDevice);
+        //     VkMemoryAllocateInfo allocInfo{};
+        //     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        //     allocInfo.allocationSize = memRequirements.size;
+        //     allocInfo.memoryTypeIndex = vu::findMemoryType(
+        //         memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        //         physicalDevice);
 
-            if (vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
-                throw std::runtime_error("failed to allocate buffer memory!");
-            }
+        //     if (vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
+        //         throw std::runtime_error("failed to allocate buffer memory!");
+        //     }
         
-            vkBindBufferMemory(device, buffer, bufferMemory, 0);
-        }
+        //     vkBindBufferMemory(device, buffer, bufferMemory, 0);
+        // }
 
         void createDescriptorSets(){
             std::cout << "we're updating the descriptor sets" << std::endl;
@@ -364,39 +376,52 @@ class VulkanComputeApp {
 
         void initializeAppBuffers(){
             VkDeviceSize gridBufferSize = gridManager.gridHeight * gridManager.gridWidth * sizeof(float);
+            VkBufferCreateInfo bufferInfo{};
+            bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            bufferInfo.size = gridBufferSize; 
+            bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT; 
+            bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-            VkBuffer gridStagingBuffer;
-            VkDeviceMemory gsBufferMemory;
-            createBuffer(gridBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                gridStagingBuffer, gsBufferMemory);
+            VmaAllocationCreateInfo allocInfo{};
+            allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+
+            vmaCreateBuffer(allocator, &bufferInfo, &allocInfo, &gridBuffer, &gridAllocation, nullptr);
             
-            void* gridData;
-            vkMapMemory(device, gsBufferMemory, 0, gridBufferSize, 0, &gridData);
-            std::vector<float> cellValues;
-            for (auto cell : gridManager.grid) {
-                cellValues.push_back(cell.val);
-            }
-            memcpy(gridData, cellValues.data(), (size_t) gridBufferSize);
-            vkUnmapMemory(device, gsBufferMemory);
+            // VkBuffer gridStagingBuffer;
+            // VkDeviceMemory gsBufferMemory;
+            // createBuffer(gridBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            //     gridStagingBuffer, gsBufferMemory);
+            
+            // void* gridData;
+            // vkMapMemory(device, gsBufferMemory, 0, gridBufferSize, 0, &gridData);
+            // std::vector<float> cellValues;
+            // for (auto cell : gridManager.grid) {
+            //     cellValues.push_back(cell.val);
+            // }
+            // memcpy(gridData, cellValues.data(), (size_t) gridBufferSize);
+            // vkUnmapMemory(device, gsBufferMemory);
 
-            createBuffer(gridBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, gridBuffer, gridBufferMemory);
+            // createBuffer(gridBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            //     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, gridBuffer, gridBufferMemory);
 
-            vu::copyBuffer(device, commandPool, gridStagingBuffer, gridBuffer, gridBufferSize, computeQueue);
+            // vu::copyBuffer(device, commandPool, gridStagingBuffer, gridBuffer, gridBufferSize, computeQueue);
 
-            vkDestroyBuffer(device, gridStagingBuffer, nullptr);
-            vkFreeMemory(device, gsBufferMemory, nullptr);
+            // vkDestroyBuffer(device, gridStagingBuffer, nullptr);
+            // vkFreeMemory(device, gsBufferMemory, nullptr);
         }
 
         void cleanup(){
             // Do all the stuff to clean up Vulkan here
-            vkDestroyBuffer(device, gridBuffer, nullptr);
-            vkFreeMemory(device, gridBufferMemory, nullptr);
+            // vkDestroyBuffer(device, gridBuffer, nullptr);
+            // vkFreeMemory(device, gridBufferMemory, nullptr);
             
-            vkDestroyDescriptorPool(device, descriptorPool, nullptr);
-            vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+            // vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+            // vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 
-            vkDestroyCommandPool(device, commandPool, nullptr);
+            // vkDestroyCommandPool(device, commandPool, nullptr);
+            vmaDestroyBuffer(allocator, gridBuffer, gridAllocation);
+            
+            vmaDestroyAllocator(allocator);
 
             vkDestroyDevice(device, nullptr);
 
