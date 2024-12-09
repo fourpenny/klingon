@@ -13,6 +13,8 @@
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
 
+#include <fstream>
+
 #ifdef NDEBUG
 	const bool enableValidationLayers = false;
 #else
@@ -102,9 +104,12 @@ class VulkanComputeApp {
         VmaAllocator allocator;
         VmaAllocation gridAllocation;
 
+        // Compute pipeline
+        VkPipelineLayout computePipelineLayout;
+        VkPipeline computePipeline;
+
         void initVulkan() {
             createInstance();
-            std::cout << "created an instance!" << std::endl;
             if (enableValidationLayers){
                 vu::setupDebugMessenger(instance, debugMessenger);
             }
@@ -113,13 +118,33 @@ class VulkanComputeApp {
 
             createComputePipeline();
             
-            // // Create the buffers needed for objects we use in compute pipeline
+            // Create the buffers needed for objects we use in compute pipeline
             createVmaAllocator();
             initializeAppBuffers();
             // createDescriptorPool();
             // createDescriptorSets();
-            // // // Create the command buffers
+            // Create the command buffers
             // createCommandBuffer();
+        }
+
+        static std::vector<char> readFile(const std::string& filename) {
+            std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+            if (!file.is_open()) {
+                throw std::runtime_error("failed to open file!");
+            }
+
+            // Preallocate a buffer for the size of the opened file
+            size_t fileSize = (size_t) file.tellg();
+            std::vector<char> buffer(fileSize);
+
+            // Now we can read all the bytes at once
+            file.seekg(0);
+            file.read(buffer.data(), fileSize);
+
+            file.close();
+
+            return buffer;
         }
 
         void createInstance() {
@@ -246,6 +271,20 @@ class VulkanComputeApp {
             vmaCreateAllocator(&allocatorCreateInfo, &allocator);
         }
 
+        VkShaderModule createShaderModule(const std::vector<char>& code) {
+            VkShaderModuleCreateInfo createInfo{};
+            createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            createInfo.codeSize = code.size();
+            createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+            VkShaderModule shaderModule;
+            if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create shader module!");
+            }
+
+            return shaderModule;
+        }
+
         void createCommandPool(){
             vu::QueueFamilyIndices queueFamilyIndices = vu::findQueueFamilies(physicalDevice);
 
@@ -272,12 +311,58 @@ class VulkanComputeApp {
         }
 
         void createComputePipeline(){
-            // TODO: Handle all the stpes of making a compute pipeline
-            // 1. Create compute shader modules
-            // 2. Create pipeline stages (there's only 1, a compute stage)
-            // 3. Create compute pipeline
-            // 4. Destroy shader modules now that they're no longer needed
-            // outside the pipeline
+            // 1. Create descriptor set layout
+            VkDescriptorSetLayoutBinding bufferBinding{};
+            bufferBinding.binding = 0; // Matches `layout(binding = 0)` in the shader
+            bufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            bufferBinding.descriptorCount = 1;
+            bufferBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+            bufferBinding.pImmutableSamplers = nullptr;
+
+            VkDescriptorSetLayoutCreateInfo layoutInfo{};
+            layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+            layoutInfo.bindingCount = 1;
+            layoutInfo.pBindings = &bufferBinding;
+
+            if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create descriptor set layout!");
+            }
+            
+            // 2. Define pipeline layout
+            VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+            pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+            pipelineLayoutInfo.setLayoutCount = 1;
+            pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+
+            if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &computePipelineLayout) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create compute pipeline layout!");
+            }
+
+            // 3. Create compute shader modules and associate it with the right
+            // stage in the pipeline (the only one)
+            auto computeShaderCode = readFile("shaders/grid.spv");
+
+            VkShaderModule computeShaderModule = createShaderModule(computeShaderCode);
+
+            VkPipelineShaderStageCreateInfo computeShaderStageInfo{};
+            computeShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            computeShaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+            computeShaderStageInfo.module = computeShaderModule;
+            computeShaderStageInfo.pName = "main";
+
+            // 4. Create the actual pipeline :)
+            VkComputePipelineCreateInfo pipelineInfo{};
+            pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+            pipelineInfo.layout = computePipelineLayout;
+            pipelineInfo.stage = computeShaderStageInfo;
+
+            if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &computePipeline) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create compute pipeline!");
+            }
+
+            // 5. Now that we've added the shader to the pipeline we can release it
+            // from memory
+            vkDestroyShaderModule(device, computeShaderModule, nullptr);
         }
 
         void createDescriptorSetLayout(){

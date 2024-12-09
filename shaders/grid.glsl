@@ -17,3 +17,14 @@ layout(binding = 0) buffer GridBuffer {
 // };
 
 // TODO: Take every grid cell in the buffer (which starts at 0) and set it to 1
+
+
+layout(local_size_x = 32, local_size_y = 32) in;
+
+void main() {
+    // Compute the flattened index based on the workgroup and local IDs
+    uint idx = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * gl_NumWorkGroups.x * gl_WorkGroupSize.x;
+
+    // Set the value to 1.0
+    grid[idx] = 1.0;
+}
