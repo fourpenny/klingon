@@ -115,17 +115,21 @@ class VulkanComputeApp {
             }
             pickPhysicalDevice();
             createLogicalDevice();
-
             
             // Create the buffers needed for objects we use in compute pipeline
             createVmaAllocator();
             initializeAppBuffers();
+            
+            // Create descriptors we can use to handle these buffers
+            // (See below for a nice reference)
+            // https://vkguide.dev/docs/chapter-4/descriptors/#mental-model
             createDescriptorSetLayout();
             createComputePipeline();
-            // createDescriptorPool();
-            // createDescriptorSets();
+            createDescriptorPool();
+            createDescriptorSets();
             // Create the command buffers
-            // createCommandBuffer();
+            createCommandPool();
+            createCommandBuffer();
         }
 
         static std::vector<char> readFile(const std::string& filename) {
@@ -321,7 +325,7 @@ class VulkanComputeApp {
                 throw std::runtime_error("failed to create compute pipeline layout!");
             }
 
-            // 3. Create compute shader modules and associate it with the right
+            // Create compute shader modules and associate it with the right
             // stage in the pipeline (the only one)
             auto computeShaderCode = readFile("shaders/grid.spv");
 
@@ -333,7 +337,7 @@ class VulkanComputeApp {
             computeShaderStageInfo.module = computeShaderModule;
             computeShaderStageInfo.pName = "main";
 
-            // 4. Create the actual pipeline :)
+            // Create the actual pipeline :)
             VkComputePipelineCreateInfo pipelineInfo{};
             pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
             pipelineInfo.layout = computePipelineLayout;
@@ -343,7 +347,7 @@ class VulkanComputeApp {
                 throw std::runtime_error("failed to create compute pipeline!");
             }
 
-            // 5. Now that we've added the shader to the pipeline we can release it
+            // Now that we've added the shader to the pipeline we can release it
             // from memory
             vkDestroyShaderModule(device, computeShaderModule, nullptr);
         }
@@ -410,24 +414,22 @@ class VulkanComputeApp {
         // }
 
         void createDescriptorSets(){
-            std::cout << "we're updating the descriptor sets" << std::endl;
-
             VkDescriptorSetAllocateInfo allocInfo{};
+            allocInfo.pNext = nullptr;
             allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
             allocInfo.descriptorPool = descriptorPool;
             allocInfo.descriptorSetCount = 1;
-            allocInfo.pSetLayouts = &descriptorSetLayout; 
+            allocInfo.pSetLayouts = &descriptorSetLayout;
 
             if (vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet) != VK_SUCCESS) {
                 throw std::runtime_error("failed to allocate descriptor sets!");
             }
-            
+
             VkDescriptorBufferInfo gridBufferInfo{};
             gridBufferInfo.buffer = gridBuffer;
             gridBufferInfo.offset = 0;
-            gridBufferInfo.range = sizeof(float);
+            gridBufferInfo.range = gridManager.gridHeight * gridManager.gridWidth * sizeof(float);
 
-            std::cout << "howdy?" << std::endl;
             VkWriteDescriptorSet gridDescriptorWrite;
             gridDescriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             gridDescriptorWrite.dstSet = descriptorSet;
@@ -438,6 +440,7 @@ class VulkanComputeApp {
             gridDescriptorWrite.pBufferInfo = &gridBufferInfo;
             gridDescriptorWrite.pImageInfo = nullptr;
             gridDescriptorWrite.pTexelBufferView = nullptr;
+            gridDescriptorWrite.pNext = nullptr;
             
             vkUpdateDescriptorSets(device, 1, &gridDescriptorWrite, 0, nullptr);
         }
@@ -480,17 +483,18 @@ class VulkanComputeApp {
 
         void cleanup(){
             // Do all the stuff to clean up Vulkan here
-            // vkDestroyBuffer(device, gridBuffer, nullptr);
-            // vkFreeMemory(device, gridBufferMemory, nullptr);
-            
-            vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
-            vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+            vkDestroyPipeline(device, computePipeline, nullptr);
+            vkDestroyPipelineLayout(device, computePipelineLayout, nullptr);
 
-            // vkDestroyCommandPool(device, commandPool, nullptr);
+            vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+            vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+
             vmaDestroyBuffer(allocator, gridBuffer, gridAllocation);
             
             vmaDestroyAllocator(allocator);
 
+            vkDestroyCommandPool(device, commandPool, nullptr);
+            
             vkDestroyDevice(device, nullptr);
 
             if (enableValidationLayers) {
