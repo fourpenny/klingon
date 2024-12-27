@@ -116,11 +116,12 @@ class VulkanComputeApp {
             pickPhysicalDevice();
             createLogicalDevice();
 
-            createComputePipeline();
             
             // Create the buffers needed for objects we use in compute pipeline
             createVmaAllocator();
             initializeAppBuffers();
+            createDescriptorSetLayout();
+            createComputePipeline();
             // createDescriptorPool();
             // createDescriptorSets();
             // Create the command buffers
@@ -311,24 +312,6 @@ class VulkanComputeApp {
         }
 
         void createComputePipeline(){
-            // 1. Create descriptor set layout
-            VkDescriptorSetLayoutBinding bufferBinding{};
-            bufferBinding.binding = 0; // Matches `layout(binding = 0)` in the shader
-            bufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            bufferBinding.descriptorCount = 1;
-            bufferBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-            bufferBinding.pImmutableSamplers = nullptr;
-
-            VkDescriptorSetLayoutCreateInfo layoutInfo{};
-            layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-            layoutInfo.bindingCount = 1;
-            layoutInfo.pBindings = &bufferBinding;
-
-            if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
-                throw std::runtime_error("failed to create descriptor set layout!");
-            }
-            
-            // 2. Define pipeline layout
             VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
             pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
             pipelineLayoutInfo.setLayoutCount = 1;
@@ -366,39 +349,36 @@ class VulkanComputeApp {
         }
 
         void createDescriptorSetLayout(){
-            VkDescriptorSetLayoutBinding bindings[num_bindings];
-
-            for (int i = 0; i < num_bindings; ++i){
-                bindings[i].binding = i;
-                bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                bindings[i].descriptorCount = 1;
-                bindings[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-                bindings[i].pImmutableSamplers = nullptr;
-            }
+            // Create descriptor set layout for grid
+            VkDescriptorSetLayoutBinding bufferBinding{};
+            bufferBinding.binding = 0; // Matches `layout(binding = 0)` in the shader
+            bufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            bufferBinding.descriptorCount = 1;
+            bufferBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+            bufferBinding.pImmutableSamplers = nullptr;
 
             VkDescriptorSetLayoutCreateInfo layoutInfo{};
             layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-            layoutInfo.bindingCount = num_bindings;
-            layoutInfo.pBindings = bindings;
+            layoutInfo.bindingCount = 1;
+            layoutInfo.pBindings = &bufferBinding;
+            layoutInfo.pNext = nullptr;
+            layoutInfo.flags = 0;
 
             if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
-                throw std::runtime_error("Failed to create descriptor set layout!");
+                throw std::runtime_error("failed to create descriptor set layout!");
             }
         }
 
         void createDescriptorPool(){
-            VkDescriptorPoolSize poolSizes[num_bindings];
-
-            for (int i = 0; i < num_bindings; ++i){
-                poolSizes[i].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                poolSizes[i].descriptorCount = 1; 
-            }
+            VkDescriptorPoolSize poolSize;
+            poolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            poolSize.descriptorCount = 1;
 
             VkDescriptorPoolCreateInfo poolInfo{};
             poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
             poolInfo.poolSizeCount = num_bindings;
-            poolInfo.pPoolSizes = poolSizes;
-            poolInfo.maxSets = 1; // One descriptor set
+            poolInfo.pPoolSizes = &poolSize;
+            poolInfo.maxSets = 1; 
 
             if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to create descriptor pool!");
@@ -503,8 +483,8 @@ class VulkanComputeApp {
             // vkDestroyBuffer(device, gridBuffer, nullptr);
             // vkFreeMemory(device, gridBufferMemory, nullptr);
             
-            // vkDestroyDescriptorPool(device, descriptorPool, nullptr);
-            // vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+            vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+            vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
             // vkDestroyCommandPool(device, commandPool, nullptr);
             vmaDestroyBuffer(allocator, gridBuffer, gridAllocation);
